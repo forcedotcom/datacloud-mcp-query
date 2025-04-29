@@ -1,10 +1,83 @@
-# README
+# MCP Data Cloud Server
 
-A repo containing all the basic file templates and general guidelines for any open source project at Salesforce.
+This MCP server provides a seamless integration between Cursor and Salesforce Data Cloud (formerly known as CDP), allowing you to execute SQL queries directly from Cursor. The server handles OAuth authentication with Salesforce and provides tools for exploring and querying Data Cloud tables.
 
-## Usage
+## Features
 
-It's required that all files must be placed at the top level of your repository.
+- Execute SQL queries against Salesforce Data Cloud
+- List available tables in the database
+- Describe table columns and structure
+- Smart table and field suggestions based on natural language input
+- Automatic OAuth2 authentication flow with Salesforce
 
-> **NOTE** Your README should contain detailed, useful information about the project!
+## Adding to Cursor
 
+1. Clone this repository to your local machine
+2. Install the required dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Connect to the MCP server in Cursor:
+    - Open Cursor IDE.
+    - Go to **Cursor Settings** → **MCP**.
+    - Click on **Add new global MCP server**.
+    - Fill in the details:
+   ```json
+       "mcpServers": {
+         ...
+        "datacloud": {
+          "command": "<path to python>",
+          "args": [
+            "<full path to>/server.py"
+          ],
+          "env": {
+            "SF_CLIENT_ID": "<Client Id>",
+            "SF_CLIENT_SECRET": "<Client Secret>>"
+          },
+          "disabled": false,
+          "autoApprove": ["suggest_table_and_fields", "describe_table", "list_tables"]
+        }
+        ...
+      }
+   ```
+    - Enable the MCP server and click refresh which should show the tool list
+
+## Configuration
+
+The server requires the following environment variables:
+
+### Required Environment Variables
+
+- `SF_CLIENT_ID`: Your Salesforce OAuth client ID
+- `SF_CLIENT_SECRET`: Your Salesforce OAuth client secret
+
+### Optional Environment Variables
+
+- `SF_LOGIN_URL`: The Salesforce login URL (default: 'login.salesforce.com')
+- `DEFAULT_LIST_TABLE_FILTER`: Filter pattern for listing tables (default: '%'). You can use this to filter for example to known "curated" tables that all share the same prefix. You can use the SQL Like syntax to express the filters.
+
+## Available Tools
+
+The server provides the following tools:
+
+1. **query**: Execute SQL queries against Data Cloud
+    - Supports PostgreSQL dialect
+    - Returns query results in a structured format
+
+2. **list_tables**: List all available tables in Data Cloud
+    - Filtered by `DEFAULT_LIST_TABLE_FILTER` pattern
+
+3. **describe_table**: Get detailed information about a specific table
+    - Shows column names and structure
+
+4. **suggest_table_and_fields**: Get AI-powered suggestions for tables and fields
+    - Accepts natural language input
+    - Returns relevant table and field suggestions
+
+## Authentication
+
+The server implements an OAuth2 flow with Salesforce:
+- Automatically opens a browser window for authentication
+- Handles token exchange and refresh
+- Maintains session for subsequent queries
+- Token expires after 110 minutes and is automatically refreshed

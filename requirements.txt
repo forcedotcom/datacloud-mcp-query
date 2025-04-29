@@ -1,0 +1,4 @@
+pydantic
+requests
+rfc3986
+mcp

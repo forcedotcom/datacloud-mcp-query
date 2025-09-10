@@ -143,3 +143,9 @@ poetry.toml
 
 # LSP config files
 pyrightconfig.json
+
+# Generated Protocol Buffer files
+generated/
+*_pb2.py
+*_pb2.pyi
+*_pb2_grpc.py

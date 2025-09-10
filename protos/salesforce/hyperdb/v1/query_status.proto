@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package salesforce.hyperdb.v1;
+
+import "salesforce/hyperdb/grpc/v1/hyper_service.proto";
+import "salesforce/hyperdb/grpc/v1/error_details.proto";
+
+// The format of a query status file for Query API V3.
+// This is used only internally.
+message QueryStatusFile {
+  // The query status
+  salesforce.hyperdb.grpc.v1.QueryStatus query_status = 1;
+
+  // The serialized schema of the spooled data (if it exists)
+  salesforce.hyperdb.grpc.v1.QueryResultPartString result_schema = 3;
+
+  // The error information
+  salesforce.hyperdb.grpc.v1.ErrorInfo error_info = 4;
+
+  // The identifying features of the original requester, formatted as JSON.
+  // In CDP, for example, this would include tenant id, data space, user id and
+  // possibly more.
+  string original_requester_details = 5;
+
+  // The result id
+  string result_id = 7;
+  // A list that stores the end offsets of tuples for each chunk.
+  // Since chunks are stored consecutively, the range of tuples for a chunk at
+  // position `i` extends from `chunk_offsets[i - 1]` (inclusive) to
+  // `chunk_offsets[i]` (exclusive). The first chunk starts from zero, so
+  // `chunk_offsets[0]` represents the end offset of the first chunk.
+  repeated uint64 chunk_offsets = 6;
+}

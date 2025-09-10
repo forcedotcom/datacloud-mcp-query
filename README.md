@@ -17,7 +17,13 @@ This MCP server provides a seamless integration between Cursor and Salesforce Da
    ```bash
    pip install -r requirements.txt
    ```
-3. Connect to the MCP server in Cursor:
+3. Build the Protocol Buffer files:
+   ```bash
+   make protos
+   # Or: python compile_protos.py
+   ```
+   For more details on the proto build system, see [PROTO_BUILD.md](PROTO_BUILD.md).
+4. Connect to the MCP server in Cursor:
    - Open Cursor IDE.
    - Go to **Cursor Settings** → **MCP**.
    - Click on **Add new global MCP server**.

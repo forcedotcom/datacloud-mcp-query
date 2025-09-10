@@ -186,3 +186,106 @@ class OAuthSession:
     def get_instance_url(self) -> str:
         self.ensure_access()
         return self.instance_url
+
+    def create_dc_session(self) -> "OAuthDCSession":
+        """Create an OAuthDCSession that manages a Data Cloud token via token exchange."""
+        return OAuthDCSession(self)
+
+
+class OAuthDCSession:
+    def __init__(self, base_session: OAuthSession):
+        self._base = base_session
+        self.dc_token: str | None = None
+        self.dc_exp: datetime | None = None
+        self.dc_instance_url: str | None = None
+
+    def _exchange_for_dc_token(self) -> dict:
+        """
+        Exchange the current Salesforce access token for a Data Cloud (A360) token.
+
+        Uses the OAuth 2.0 Token Exchange spec:
+        POST {instance_url}/services/a360/token
+        """
+        access_token = self._base.ensure_access()
+        assert self._base.instance_url, "instance_url must be set after OAuth access"
+
+        token_exchange_url = f"{self._base.instance_url}/services/a360/token"
+        response = requests.post(
+            token_exchange_url,
+            data={
+                "grant_type": "urn:salesforce:grant-type:external:cdp",
+                "subject_token": access_token,
+                "subject_token_type": "urn:ietf:params:oauth:token-type:access_token",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        logger.info(
+            f"A360 token exchange response: status={response.status_code}, elapsed={response.elapsed.total_seconds():.2f}s"
+        )
+
+        if response.status_code >= 400:
+            logger.error(f"A360 token exchange failed: {response.text}")
+
+        response.raise_for_status()
+        payload = response.json()
+        # Prefer any instance url present in response, fallback to base
+        self.dc_instance_url = (
+            payload.get("instance_url")
+            or payload.get("a360_instance_url")
+            or self._base.instance_url
+        )
+        return payload
+
+    def ensure_dc_access(self) -> str:
+        if self.dc_exp is not None and datetime.now() > self.dc_exp:
+            self.dc_exp = None
+            self.dc_token = None
+
+        if self.dc_token is None:
+            dc_auth_info = self._exchange_for_dc_token()
+            self.dc_token = dc_auth_info.get("access_token")
+            expires_in = dc_auth_info.get("expires_in")
+            if isinstance(expires_in, (int, float)) and expires_in > 0:
+                self.dc_exp = datetime.now() + timedelta(seconds=max(60, int(expires_in) - 60))
+            else:
+                self.dc_exp = datetime.now() + timedelta(minutes=50)
+
+            if not self.dc_token:
+                raise RuntimeError("A360 token exchange did not return access_token")
+
+        return self.dc_token
+
+    def get_token(self) -> str:
+        return self.ensure_dc_access()
+
+    def get_instance_url(self) -> str:
+        # Ensure base is valid and token exchange sets dc_instance_url if needed
+        self._base.ensure_access()
+        if not self.dc_instance_url:
+            self.dc_instance_url = self._base.instance_url
+        return self.dc_instance_url  # type: ignore[return-value]
+
+    def get_requests_session(self) -> requests.Session:
+        token = self.ensure_dc_access()
+        sess = requests.Session()
+        sess.headers.update({"Authorization": f"Bearer {token}"})
+        return sess
+
+
+if __name__ == "__main__":
+    # Basic CLI to initialize a Data Cloud OAuth session
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    logger.setLevel(logging.DEBUG)
+
+    cfg = OAuthConfig.from_env()
+    base_session = OAuthSession(cfg)
+    dc_session = base_session.create_dc_session()
+
+    # Trigger token acquisition (will run interactive OAuth flow if needed)
+    dc_session.get_token()
+    print(f"Initialized Data Cloud session. Instance URL: {dc_session.get_instance_url()}")

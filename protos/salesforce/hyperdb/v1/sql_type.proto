@@ -1,0 +1,81 @@
+/*
+  This definition is kept in sync at
+  * https://github.com/hyper-db-emu/hyper-db/blob/main/protos/salesforce/hyperdb/v1/sql_type.proto
+  * https://git.soma.salesforce.com/a360/cdp-protos/blob/master/proto/hyperdb-proto/salesforce/hyperdb/v1/sql_type.proto
+  When you update one definition, please also update the other!
+*/
+syntax = "proto3";
+
+package salesforce.hyperdb.v1;
+
+option java_multiple_files = true;
+option java_package = "com.salesforce.hyperdb.v1";
+option java_outer_classname = "HyperSqlTypeProto";
+
+message SQLType {
+  bool nullable = 1;
+
+  oneof kind {
+    Boolean boolean = 2;
+    SmallInt smallint = 3;
+    Integer integer = 5;
+    BigInt bigint = 7;
+    Float float = 25;
+    Double double = 11;
+
+    String string = 12;
+    Binary binary = 13;
+    Timestamp timestamp = 14;
+    Date date = 16;
+    Time time = 17;
+
+    FixedChar fixedchar = 21;
+    VarChar varchar = 22;
+    Decimal decimal = 24;
+  }
+
+  message Boolean {}
+  message SmallInt {}
+  message Integer {}
+  message BigInt {}
+  message Float {}
+  message Double {}
+  message String {}
+  message Binary {}
+  message Timestamp {}
+  message Date {}
+  message Time {}
+
+  message FixedChar {
+    uint32 length = 1;
+  }
+  message VarChar {
+    uint32 length = 1;
+  }
+
+  message Decimal {
+    uint32 scale = 1;
+    uint32 precision = 2;
+  }
+}
+
+message QualifiedTableName {
+  string database_name = 1;
+  string schema_name = 2;
+  string table_name = 3;
+}
+
+message ColumnDescriptor {
+  string name = 1;
+  SQLType type = 2;
+  map<string, string> properties = 3;
+}
+
+message TableDescriptor {
+  QualifiedTableName name = 1;
+  repeated ColumnDescriptor columns = 2;
+  map<string, string> metadata_properties = 3;
+  bool descriptor_only = 4;
+  // All tables referenced by this view in random order
+  repeated TableDescriptor referenced_tables = 5;
+}

@@ -69,7 +69,7 @@ def run_query(
         f"Submitting SQL query to {url_base}, with params: {common_params}")
 
     submit_response = requests.post(
-        url_base, json=submit_body, params=common_params, headers=headers)
+        url_base, json=submit_body, params=common_params, headers=headers, timeout=100)
 
     logger.info(
         f"Query submission response: status={submit_response.status_code}, elapsed={submit_response.elapsed.total_seconds():.2f}s")
@@ -102,7 +102,7 @@ def run_query(
             "waitTimeMs": 10000,
         })
         poll_response = requests.get(
-            poll_url, params=poll_params, headers=headers)
+            poll_url, params=poll_params, headers=headers, timeout=30)
 
         logger.debug(
             f"Poll response: status={poll_response.status_code}, elapsed={poll_response.elapsed.total_seconds():.2f}s")
@@ -125,7 +125,7 @@ def run_query(
             f"Fetching rows: offset={rows_params.get('offset')}, limit={rows_params.get('rowLimit')}")
 
         rows_response = requests.get(
-            rows_url, params=rows_params, headers=headers)
+            rows_url, params=rows_params, headers=headers, timeout=60)
 
         logger.debug(
             f"Rows fetch response: status={rows_response.status_code}, elapsed={rows_response.elapsed.total_seconds():.2f}s")

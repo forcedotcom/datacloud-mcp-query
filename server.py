@@ -40,7 +40,8 @@ def run_focus(sql: str, parameters: list[dict] = []):
 
     r = requests.post(focus_url,
                       json=request_data,
-                      headers={'Authorization': 'Bearer ' + token})
+                      headers={'Authorization': 'Bearer ' + token},
+                      timeout=30)
 
     logger.info(f"Focus API response: status={r.status_code}, elapsed={r.elapsed.total_seconds():.2f}s")
 
@@ -56,6 +57,8 @@ def run_focus(sql: str, parameters: list[dict] = []):
             logger.error(f"Failed to parse error response: {e}")
         raise Exception(r.status_code, r.reason, message)
     else:
+        # Additional safety check for HTTP errors
+        r.raise_for_status()
         result = r.json()
         if 'error' in result and result['error'] != None:
             raise Exception(r.status_code, result['error'])
@@ -96,6 +99,7 @@ def suggest_table_and_fields(
     utterance: str = Field(
         description="A prompt that describes the task / data which is needed to formulate a query")
 ) -> list[str]:
+    # Input validation is handled within run_focus
     return run_focus(utterance)
 
 

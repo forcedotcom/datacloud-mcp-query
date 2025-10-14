@@ -1,4 +1,4 @@
-# MCP Data Cloud Server
+# Data 360 Query MCP Server
 
 This MCP server provides a seamless integration between Cursor and Salesforce Data Cloud (formerly known as CDP), allowing you to execute SQL queries directly from Cursor. The server handles OAuth authentication with Salesforce and provides tools for exploring and querying Data Cloud tables.
 

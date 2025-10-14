@@ -98,7 +98,7 @@ def describe_table(
 def suggest_table_and_fields(
     utterance: str = Field(
         description="A prompt that describes the task / data which is needed to formulate a query")
-) -> list[str]:
+) -> list[dict]:
     # Input validation is handled within run_focus
     return run_focus(utterance)
 

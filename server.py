@@ -21,49 +21,6 @@ oauth_session: OAuthSession = OAuthSession(sf_org)
 # Non-auth configuration
 DEFAULT_LIST_TABLE_FILTER = os.getenv('DEFAULT_LIST_TABLE_FILTER', '%')
 
-def run_focus(sql: str, parameters: list[dict] = []):
-    base_url = oauth_session.get_instance_url()
-    token = oauth_session.get_token()
-
-    focus_url = base_url + '/services/data/v63.0/v1/prism/focus'
-    request_data = {
-        'utterance': sql,
-        'appId': 'mcpServer',
-        "dataSources": [
-            {
-                "dataSourceType": "DATACLOUD"
-            }
-        ]
-    }
-
-    logger.info(f"Calling Focus API: {focus_url}")
-
-    r = requests.post(focus_url,
-                      json=request_data,
-                      headers={'Authorization': 'Bearer ' + token},
-                      timeout=120)
-
-    logger.info(f"Focus API response: status={r.status_code}, elapsed={r.elapsed.total_seconds():.2f}s")
-
-    if r.status_code > 201:
-        message = r.text
-        logger.error(f"Focus API request failed: {message}")
-        try:
-            structured_message = json.loads(r.text)[0]
-            details = json.loads(structured_message["message"])
-            message = details["primaryMessage"] + \
-                ", Hint: " + details["customerHint"]
-        except ValueError as e:
-            logger.error(f"Failed to parse error response: {e}")
-        raise Exception(r.status_code, r.reason, message)
-    else:
-        # Additional safety check for HTTP errors
-        r.raise_for_status()
-        result = r.json()
-        if 'error' in result and result['error'] != None:
-            raise Exception(r.status_code, result['error'])
-        return [{'column': entity['qualifiedName'].replace(entity['parentId']+".", "").replace("default.", ""), 'table': entity['parentId'], 'description': entity['description']} for entity in result['entities']]
-
 
 @mcp.tool(description="Executes a SQL query and returns the results")
 def query(
@@ -92,15 +49,6 @@ def describe_table(
     # Extract data from the result dictionary
     data = result.get("data", [])
     return [x[0] for x in data]
-
-
-@mcp.tool(description="Suggests tables and fields from the database that could be relevant to a user question")
-def suggest_table_and_fields(
-    utterance: str = Field(
-        description="A prompt that describes the task / data which is needed to formulate a query")
-) -> list[dict]:
-    # Input validation is handled within run_focus
-    return run_focus(utterance)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,6 @@ This MCP server provides a seamless integration between Cursor and Salesforce Da
 - Execute SQL queries against Salesforce Data Cloud
 - List available tables in the database
 - Describe table columns and structure
-- Smart table and field suggestions based on natural language input
 - Automatic OAuth2 authentication flow with Salesforce
 
 ## Adding to Cursor
@@ -72,10 +71,6 @@ The server provides the following tools:
 
 3. **describe_table**: Get detailed information about a specific table
    - Shows column names and structure
-
-4. **suggest_table_and_fields**: Get AI-powered suggestions for tables and fields
-   - Accepts natural language input
-   - Returns relevant table and field suggestions
 
 ## Authentication
 

@@ -17,7 +17,8 @@ def _handle_error_response(response: requests.Response):
         message = response.text
         try:
             payload = json.loads(response.text)
-            # Connect API error format: list with first element containing JSON string in "message"
+            # Connect API error format: list with first element containing JSON
+            # string in "message"
             if isinstance(payload, list) and len(payload) > 0:
                 structured_message = payload[0]
                 try:
@@ -84,7 +85,11 @@ def run_query(
         f"Submitting SQL query to {url_base}, with params: {common_params}")
 
     submit_response = requests.post(
-        url_base, json=submit_body, params=common_params, headers=headers, timeout=120)
+        url_base,
+        json=submit_body,
+        params=common_params,
+        headers=headers,
+        timeout=120)
 
     logger.info(
         f"Query submission response: status={submit_response.status_code}, elapsed={submit_response.elapsed.total_seconds():.2f}s")
@@ -112,7 +117,8 @@ def run_query(
             f"Polling query status (attempt {poll_count}): {poll_url}")
 
         poll_params = dict(common_params)
-        # Signal that we want to do long-polling to get best latency for query end notification and minimize RPC calls
+        # Signal that we want to do long-polling to get best latency for query
+        # end notification and minimize RPC calls
         poll_params.update({
             "waitTimeMs": 10000,
         })

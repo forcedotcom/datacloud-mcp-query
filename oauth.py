@@ -26,7 +26,12 @@ class OAuthConfigError(Exception):
 
 
 class OAuthConfig:
-    def __init__(self, client_id: str, client_secret: str, login_root: str, redirect_uri: str):
+    def __init__(
+            self,
+            client_id: str,
+            client_secret: str,
+            login_root: str,
+            redirect_uri: str):
         self.client_id = client_id
         self.client_secret = client_secret
         self.login_root = login_root
@@ -49,7 +54,11 @@ class OAuthConfig:
                 f"Missing required environment variables: {', '.join(missing)}"
             )
 
-        return cls(client_id=client_id, client_secret=client_secret, login_root=login_root, redirect_uri=redirect_uri)
+        return cls(
+            client_id=client_id,
+            client_secret=client_secret,
+            login_root=login_root,
+            redirect_uri=redirect_uri)
 
 
 class _RequestHandler(http.server.BaseHTTPRequestHandler):  # pragma: no cover
@@ -172,7 +181,8 @@ class OAuthSession:
             headers={"Accept": "application/json"},
         )
 
-        logger.info(f"Token exchange response: status={response.status_code}, elapsed={response.elapsed.total_seconds():.2f}s")
+        logger.info(
+            f"Token exchange response: status={response.status_code}, elapsed={response.elapsed.total_seconds():.2f}s")
 
         if response.status_code >= 400:
             logger.error(f"Token exchange failed: {response.text}")

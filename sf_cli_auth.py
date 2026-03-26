@@ -42,14 +42,14 @@ class SFCLIAuth:
         self._instance_url: Optional[str] = None
         self._token_expiry: Optional[datetime] = None
 
-        logger.info(f"Initializing SF CLI authentication with org: {org_alias}")
+        logger.info(
+            f"Initializing SF CLI authentication with org: {org_alias}")
 
         # Validate SF CLI is available
         if not shutil.which("sf"):
             raise Exception(
                 "SF CLI (sf command) not found in PATH. "
-                "Install from: https://developer.salesforce.com/tools/salesforcecli"
-            )
+                "Install from: https://developer.salesforce.com/tools/salesforcecli")
 
         # Test authentication by fetching initial token
         try:
@@ -58,8 +58,7 @@ class SFCLIAuth:
             raise Exception(
                 f"Failed to authenticate with SF CLI org '{org_alias}'. "
                 f"Ensure you've authenticated via: sf org login web --alias {org_alias}\n"
-                f"Error: {str(e)}"
-            ) from e
+                f"Error: {str(e)}") from e
 
     @staticmethod
     def is_available() -> bool:
@@ -69,8 +68,8 @@ class SFCLIAuth:
         Returns:
             bool: True if SF_ORG_ALIAS is set and sf command exists
         """
-        return bool(os.getenv("SF_ORG_ALIAS")) and shutil.which("sf") is not None
-
+        has_alias = bool(os.getenv("SF_ORG_ALIAS"))
+        return has_alias and shutil.which("sf") is not None
 
     def _refresh_credentials(self) -> None:
         """
@@ -97,7 +96,8 @@ class SFCLIAuth:
             output = json.loads(result.stdout)
 
             # Extract access token and instance URL
-            # SF CLI output format: {"result": {"accessToken": "...", "instanceUrl": "..."}}
+            # SF CLI output format: {"result": {"accessToken": "...",
+            # "instanceUrl": "..."}}
             result_data = output.get("result", {})
             access_token = result_data.get("accessToken")
             instance_url = result_data.get("instanceUrl")
@@ -105,8 +105,7 @@ class SFCLIAuth:
             if not access_token or not instance_url:
                 raise Exception(
                     f"SF CLI response missing required fields. "
-                    f"Got accessToken={bool(access_token)}, instanceUrl={bool(instance_url)}"
-                )
+                    f"Got accessToken={bool(access_token)}, instanceUrl={bool(instance_url)}")
 
             # Update cached values
             self._token = access_token
@@ -115,23 +114,26 @@ class SFCLIAuth:
 
             logger.info(
                 f"Successfully refreshed SF CLI credentials, "
-                f"cached until {self._token_expiry.strftime('%Y-%m-%d %H:%M:%S')}"
-            )
+                f"cached until {self._token_expiry.strftime('%Y-%m-%d %H:%M:%S')}")
 
         except subprocess.TimeoutExpired as e:
-            raise Exception(f"SF CLI command timed out after 120 seconds") from e
+            raise Exception(
+                f"SF CLI command timed out after 120 seconds") from e
         except subprocess.CalledProcessError as e:
             error_output = e.stderr if e.stderr else e.stdout
             raise Exception(
                 f"SF CLI command failed with exit code {e.returncode}. "
                 f"Ensure you've authenticated via: sf org login web --alias {self.org_alias}\n"
-                f"Error output: {error_output[:500]}"
+                f"Error output: {error_output[:500]}") from e
+        except json.JSONDecodeError as e:
+            raise Exception(
+                f"SF CLI returned invalid JSON. "
+                f"Raw output (first 500 chars): {result.stdout[:500]}"
             ) from e
         except FileNotFoundError as e:
             raise Exception(
                 "SF CLI (sf command) not found. "
-                "Install from: https://developer.salesforce.com/tools/salesforcecli"
-            ) from e
+                "Install from: https://developer.salesforce.com/tools/salesforcecli") from e
 
     def _ensure_valid_token(self) -> None:
         """Ensure we have a valid cached token, refreshing if needed."""

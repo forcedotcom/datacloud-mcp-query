@@ -74,8 +74,7 @@ def _build_error_message() -> str:
         "  1. Create a Connected App (see CONNECTED_APP_SETUP.md)\n"
         "  2. Set environment variables:\n"
         "     export SF_CLIENT_ID='your_client_id'\n"
-        "     export SF_CLIENT_SECRET='your_client_secret'\n"
-    )
+        "     export SF_CLIENT_SECRET='your_client_secret'\n")
 
 
 def create_auth_provider() -> AuthProvider:
@@ -102,12 +101,12 @@ def create_auth_provider() -> AuthProvider:
 
     # Try SF CLI authentication first if configured
     if sf_org_alias and SFCLIAuth.is_available():
-        logger.info(f"SF_ORG_ALIAS is set to '{sf_org_alias}', attempting SF CLI authentication")
+        logger.info(
+            f"SF_ORG_ALIAS is set to '{sf_org_alias}', attempting SF CLI authentication")
         try:
             auth_provider = SFCLIAuth(sf_org_alias)
-            # Test authentication by calling get_token()
-            auth_provider.get_token()
-            logger.info(f"Successfully configured SF CLI authentication with org: {sf_org_alias}")
+            logger.info(
+                f"Successfully configured SF CLI authentication with org: {sf_org_alias}")
             return auth_provider
         except Exception as e:
             logger.warning(
@@ -117,14 +116,14 @@ def create_auth_provider() -> AuthProvider:
 
     # Try OAuth authentication if configured
     if OAuthSession.is_available():
-        logger.info("OAuth credentials configured, using OAuth PKCE authentication")
+        logger.info(
+            "OAuth credentials configured, using OAuth PKCE authentication")
         try:
             oauth_session = OAuthSession(OAuthConfig.from_env())
             logger.info("Successfully configured OAuth PKCE authentication")
             return oauth_session
         except OAuthConfigError as e:
             logger.warning(f"OAuth configuration failed: {e}")
-
 
     # No authentication method available
     error_message = _build_error_message()

@@ -1,9 +1,9 @@
-import json
 import logging
+import os
+
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
-import requests
-import os
+
 from auth_factory import create_auth_provider, AuthenticationError
 from connect_api_dc_sql import run_query
 
@@ -36,8 +36,11 @@ def query(
 
 @mcp.tool(description="Lists the available tables in the database")
 def list_tables() -> list[str]:
-    sql = "SELECT c.relname AS TABLE_NAME FROM pg_catalog.pg_namespace n, pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_description d ON (c.oid = d.objoid AND d.objsubid = 0  and d.classoid = 'pg_class'::regclass) WHERE c.relnamespace = n.oid AND c.relname LIKE '%s'" % DEFAULT_LIST_TABLE_FILTER
-    result = run_query(auth_provider, sql)
+    sql = "SELECT c.relname AS TABLE_NAME FROM pg_catalog.pg_namespace n, pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_description d ON (c.oid = d.objoid AND d.objsubid = 0 AND d.classoid = 'pg_class'::regclass) WHERE c.relnamespace = n.oid AND c.relname LIKE :tableFilter"
+    result = run_query(
+        auth_provider, sql,
+        sql_parameters=[{"name": "tableFilter", "value": DEFAULT_LIST_TABLE_FILTER}],
+    )
     # Extract data from the result dictionary
     data = result.get("data", [])
     return [x[0] for x in data]

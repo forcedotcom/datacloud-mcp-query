@@ -90,6 +90,18 @@ class OAuthSession:
         self.exp: datetime | None = None
         self.instance_url: str | None = None
 
+    @staticmethod
+    def is_available() -> bool:
+        """
+        Check if OAuth authentication is configured and available.
+
+        Returns:
+            bool: True if SF_CLIENT_ID and SF_CLIENT_SECRET are set
+        """
+        client_id = os.getenv("SF_CLIENT_ID")
+        client_secret = os.getenv("SF_CLIENT_SECRET")
+        return bool(client_id and client_secret)
+
     def _run_oauth_flow(self, scopes: list[str]):
         logger.info(f"Starting OAuth flow with scopes: {scopes}")
         login_url = f"https://{self.config.login_root}/services/oauth2/authorize"

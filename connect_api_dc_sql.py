@@ -1,11 +1,17 @@
 import json
 import logging
 import time
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Protocol
 
 import requests
 
 from oauth import OAuthSession, OAuthConfig
+
+
+class AuthProvider(Protocol):
+    """Protocol for authentication providers (SF CLI, OAuth, etc.)"""
+    def get_token(self) -> str: ...
+    def get_instance_url(self) -> str: ...
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -40,7 +46,7 @@ def _handle_error_response(response: requests.Response):
 
 
 def run_query(
-    oauth_session: OAuthSession,
+    auth_provider: AuthProvider,
     sql: str,
     dataspace: str = "default",
     workload_name: str | None = "data-360-mcp-query-oss",
@@ -50,12 +56,19 @@ def run_query(
     Execute a SQL query using the Data Cloud Query Connect API, handling long-running queries
     and paginated result retrieval.
 
+    Args:
+        auth_provider: Authentication provider (SF CLI, OAuth, etc.)
+        sql: SQL query string
+        dataspace: Data Cloud dataspace name (default: "default")
+        workload_name: Workload name for resource management
+        pagination_batch_size: Number of rows to fetch per page
+
     Returns a dictionary containing:
     - 'data': the complete list of rows (aggregated across all pages) or "(empty)" if no rows
     - 'metadata': the schema/metadata of the result columns
     """
-    base_url = oauth_session.get_instance_url()
-    token = oauth_session.get_token()
+    base_url = auth_provider.get_instance_url()
+    token = auth_provider.get_token()
 
     headers = {"Authorization": f"Bearer {token}"}
     url_base = base_url + "/services/data/v63.0/ssot/query-sql"
@@ -161,10 +174,25 @@ if __name__ == "__main__":
     # Set debug level for this module during testing
     logger.setLevel(logging.DEBUG)
 
-    sf_org: OAuthConfig = OAuthConfig.from_env()
-    oauth_session: OAuthSession = OAuthSession(sf_org)
+    # Use the new auth factory (supports both SF CLI and OAuth with auto-detection)
+    # This will automatically choose:
+    #   - SF CLI authentication if SF_ORG_ALIAS is set
+    #   - OAuth PKCE authentication if SF_CLIENT_ID and SF_CLIENT_SECRET are set
+    from auth_factory import create_auth_provider
 
-    result = run_query(OAuthSession(OAuthConfig.from_env(
-    )), "SELECT g::text || rpad(1::text,100) as a, g as b FROM generate_series(1, 40000) g ORDER BY b DESC")
-    print(f"Query result: {len(result['data'])} rows returned")
-    print(result)
+    logger.info("Creating authentication provider with auto-detection...")
+    auth_provider = create_auth_provider()
+
+    # Run a test query that generates 40,000 rows to test pagination
+    logger.info("Running test query with pagination...")
+    result = run_query(
+        auth_provider,
+        "SELECT g::text || rpad(1::text,100) as a, g as b FROM generate_series(1, 40000) g ORDER BY b DESC"
+    )
+
+    print(f"\n✓ Query completed successfully!")
+    print(f"✓ Query result: {len(result['data'])} rows returned")
+    print(f"✓ Metadata columns: {len(result['metadata'])} columns")
+    print(f"\nFirst 3 rows:")
+    for i, row in enumerate(result['data'][:3]):
+        print(f"  Row {i+1}: {row}")

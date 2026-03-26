@@ -4,7 +4,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 import requests
 import os
-from oauth import OAuthConfig, OAuthSession
+from auth_factory import create_auth_provider, AuthenticationError
 from connect_api_dc_sql import run_query
 
 # Get logger for this module
@@ -14,9 +14,12 @@ logger = logging.getLogger(__name__)
 # Create an MCP server
 mcp = FastMCP("Demo")
 
-# Global config and session
-sf_org: OAuthConfig = OAuthConfig.from_env()
-oauth_session: OAuthSession = OAuthSession(sf_org)
+# Global authentication provider
+try:
+    auth_provider = create_auth_provider()
+except AuthenticationError as e:
+    logger.error(f"Authentication configuration error: {e}")
+    raise SystemExit(1) from e
 
 # Non-auth configuration
 DEFAULT_LIST_TABLE_FILTER = os.getenv('DEFAULT_LIST_TABLE_FILTER', '%')
@@ -28,13 +31,13 @@ def query(
         description="A SQL query in the PostgreSQL dialect make sure to always quote all identifies and use the exact casing. To formulate the query first verify which tables and fields to use through the suggest fields tool (or if it is broken through the list tables / describe tables call). Before executing the tool provide the user a succinct summary (targeted to low code users) on the semantics of the query"),
 ):
     # Returns both data and metadata
-    return run_query(oauth_session, sql)
+    return run_query(auth_provider, sql)
 
 
 @mcp.tool(description="Lists the available tables in the database")
 def list_tables() -> list[str]:
     sql = "SELECT c.relname AS TABLE_NAME FROM pg_catalog.pg_namespace n, pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_description d ON (c.oid = d.objoid AND d.objsubid = 0  and d.classoid = 'pg_class'::regclass) WHERE c.relnamespace = n.oid AND c.relname LIKE '%s'" % DEFAULT_LIST_TABLE_FILTER
-    result = run_query(oauth_session, sql)
+    result = run_query(auth_provider, sql)
     # Extract data from the result dictionary
     data = result.get("data", [])
     return [x[0] for x in data]
@@ -45,7 +48,7 @@ def describe_table(
     table: str = Field(description="The table name"),
 ) -> list[str]:
     sql = f"SELECT a.attname FROM pg_catalog.pg_namespace n JOIN pg_catalog.pg_class c ON (c.relnamespace = n.oid) JOIN pg_catalog.pg_attribute a ON (a.attrelid = c.oid) JOIN pg_catalog.pg_type t ON (a.atttypid = t.oid) LEFT JOIN pg_catalog.pg_attrdef def ON (a.attrelid = def.adrelid AND a.attnum = def.adnum) LEFT JOIN pg_catalog.pg_description dsc ON (c.oid = dsc.objoid AND a.attnum = dsc.objsubid) LEFT JOIN pg_catalog.pg_class dc ON (dc.oid = dsc.classoid AND dc.relname = 'pg_class') LEFT JOIN pg_catalog.pg_namespace dn ON (dc.relnamespace = dn.oid AND dn.nspname = 'pg_catalog') WHERE a.attnum > 0 AND NOT a.attisdropped AND c.relname='{table}'"
-    result = run_query(oauth_session, sql)
+    result = run_query(auth_provider, sql)
     # Extract data from the result dictionary
     data = result.get("data", [])
     return [x[0] for x in data]

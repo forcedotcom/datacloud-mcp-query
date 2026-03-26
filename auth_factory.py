@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from auth_interface import AuthProvider
 
 from sf_cli_auth import SFCLIAuth
-from oauth import OAuthConfig, OAuthSession
+from oauth import OAuthConfig, OAuthConfigError, OAuthSession
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -122,10 +122,9 @@ def create_auth_provider() -> AuthProvider:
             oauth_session = OAuthSession(OAuthConfig.from_env())
             logger.info("Successfully configured OAuth PKCE authentication")
             return oauth_session
-        except SystemExit:
-            # OAuthConfig.from_env() calls sys.exit(1) on missing vars
-            # This shouldn't happen since we checked is_available(), but handle it anyway
-            pass
+        except OAuthConfigError as e:
+            logger.warning(f"OAuth configuration failed: {e}")
+
 
     # No authentication method available
     error_message = _build_error_message()

@@ -1,17 +1,11 @@
 import json
 import logging
 import time
-from typing import Dict, List, Optional, Union, Protocol
+from typing import Dict, List, Optional, Union
 
 import requests
 
-from oauth import OAuthSession, OAuthConfig
-
-
-class AuthProvider(Protocol):
-    """Protocol for authentication providers (SF CLI, OAuth, etc.)"""
-    def get_token(self) -> str: ...
-    def get_instance_url(self) -> str: ...
+from auth_interface import AuthProvider
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -48,6 +42,7 @@ def _handle_error_response(response: requests.Response):
 def run_query(
     auth_provider: AuthProvider,
     sql: str,
+    sql_parameters: Optional[List[Dict[str, Union[str, int, float, bool]]]] = None,
     dataspace: str = "default",
     workload_name: str | None = "data-360-mcp-query-oss",
     pagination_batch_size: int = 100000,
@@ -58,7 +53,12 @@ def run_query(
 
     Args:
         auth_provider: Authentication provider (SF CLI, OAuth, etc.)
-        sql: SQL query string
+        sql: SQL query string (use :paramName placeholders for parameterized queries)
+        sql_parameters: Optional list of parameter dicts, each with "name" and "value" keys,
+            and an optional "type" key. Values can be str, int, float, or bool. Examples:
+            [{"name": "startDate", "value": "2025-01-01T00:00:00Z"}]
+            [{"name": "limit", "value": 100}]
+            [{"name": "active", "value": True}]
         dataspace: Data Cloud dataspace name (default: "default")
         workload_name: Workload name for resource management
         pagination_batch_size: Number of rows to fetch per page
@@ -77,7 +77,9 @@ def run_query(
         common_params["workloadName"] = workload_name
 
     # Step 1: submit the query
-    submit_body = {"sql": sql}
+    submit_body: dict = {"sql": sql}
+    if sql_parameters:
+        submit_body["sqlParameters"] = sql_parameters
     logger.info(
         f"Submitting SQL query to {url_base}, with params: {common_params}")
 

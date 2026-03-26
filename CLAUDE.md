@@ -116,10 +116,16 @@ The codebase follows a clean four-layer architecture with pluggable authenticati
 - Uses PKCE (Proof Key for Code Exchange) for enhanced security
 
 **Query Execution Flow:**
-1. Submit SQL query via POST to get `queryId`
+1. Submit SQL query via POST (with optional `sqlParameters`) to get `queryId`
 2. Poll query status with long-polling (`waitTimeMs=10000`) until completion
 3. Retrieve results via pagination if `rowCount > initial rows returned`
 4. Aggregate all pages into single response
+
+**Parameterized Queries:**
+- `run_query()` accepts an optional `sql_parameters` list for safe value binding
+- Parameters use `:paramName` placeholders in SQL, resolved server-side by Data Cloud
+- Format: `[{"name": "paramName", "value": "someValue"}]` (optional `"type"` key)
+- Used by `describe_table()` to safely pass the table name without string interpolation
 
 **Workload Management:**
 - Default workload name: `"data-360-mcp-query-oss"`

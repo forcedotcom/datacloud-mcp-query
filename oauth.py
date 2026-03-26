@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import logging
 import os
-import sys
 import base64
 import hashlib
 import secrets
@@ -19,6 +18,11 @@ from rfc3986 import builder as uri_builder
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
+
+
+class OAuthConfigError(Exception):
+    """Raised when OAuth configuration is incomplete or invalid."""
+    pass
 
 
 class OAuthConfig:
@@ -41,9 +45,9 @@ class OAuthConfig:
             "SF_CLIENT_SECRET": client_secret,
         }.items() if not val]
         if missing:
-            print(
-                f"Error: Missing required environment variables: {', '.join(missing)}")
-            sys.exit(1)
+            raise OAuthConfigError(
+                f"Missing required environment variables: {', '.join(missing)}"
+            )
 
         return cls(client_id=client_id, client_secret=client_secret, login_root=login_root, redirect_uri=redirect_uri)
 

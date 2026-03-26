@@ -40,14 +40,13 @@ def _build_error_message() -> str:
     # Determine which specific error scenario we're in
     if sf_org_alias and not sf_client_id:
         return base_message + (
-            "SF_ORG_ALIAS is set, but SF CLI authentication failed.\n"
-            "Ensure you've authenticated via:\n"
-            f"  sf org login web --alias {sf_org_alias}\n\n"
+            f"SF_ORG_ALIAS is set to '{sf_org_alias}', but the sf CLI binary "
+            "was not found in PATH.\n"
+            "Install SF CLI: https://developer.salesforce.com/tools/salesforcecli\n\n"
             "Alternatively, configure OAuth authentication with:\n"
             "  export SF_CLIENT_ID='your_client_id'\n"
             "  export SF_CLIENT_SECRET='your_client_secret'\n"
-            "See CONNECTED_APP_SETUP.md for OAuth setup instructions.\n"
-        )
+            "See CONNECTED_APP_SETUP.md for OAuth setup instructions.\n")
 
     if sf_client_id and not sf_client_secret:
         return base_message + (
@@ -79,43 +78,42 @@ def _build_error_message() -> str:
 
 def create_auth_provider() -> AuthProvider:
     """
-    Create an authentication provider with auto-detection.
+    Create an authentication provider based on configured environment variables.
 
-    Auto-detection logic:
-    1. If SF_ORG_ALIAS is set and SF CLI is available:
-       - Try SF CLI authentication
-       - If successful, return SFCLIAuth instance
-       - If failed, log warning and continue to OAuth fallback
-    2. If SF_CLIENT_ID and SF_CLIENT_SECRET are set:
-       - Return OAuthSession instance
-    3. Otherwise:
-       - Raise AuthenticationError with setup instructions
+    Credentials are not fetched eagerly -- the returned provider will authenticate
+    lazily on first use, keeping MCP server startup fast.
+
+    Auto-detection priority:
+    1. SF CLI (if SF_ORG_ALIAS is set and sf binary exists)
+    2. OAuth PKCE (if SF_CLIENT_ID and SF_CLIENT_SECRET are set)
+    3. Raises AuthenticationError with setup instructions
+
+    If both methods are configured, SF CLI is used and a warning is logged.
 
     Returns:
-        AuthProvider: An initialized authentication provider
+        AuthProvider: A configured (but not yet authenticated) provider
 
     Raises:
         AuthenticationError: If no authentication method can be configured
     """
-    sf_org_alias = os.getenv("SF_ORG_ALIAS")
+    sf_cli_configured = SFCLIAuth.is_configured()
+    oauth_configured = OAuthSession.is_configured()
+
+    if sf_cli_configured and oauth_configured:
+        logger.warning(
+            "Both SF CLI (SF_ORG_ALIAS) and OAuth (SF_CLIENT_ID/SF_CLIENT_SECRET) "
+            "are configured. Using SF CLI. To use OAuth instead, unset SF_ORG_ALIAS.")
 
     # Try SF CLI authentication first if configured
-    if sf_org_alias and SFCLIAuth.is_available():
+    if sf_cli_configured:
+        sf_org_alias = os.getenv("SF_ORG_ALIAS")
         logger.info(
-            f"SF_ORG_ALIAS is set to '{sf_org_alias}', attempting SF CLI authentication")
-        try:
-            auth_provider = SFCLIAuth(sf_org_alias)
-            logger.info(
-                f"Successfully configured SF CLI authentication with org: {sf_org_alias}")
-            return auth_provider
-        except Exception as e:
-            logger.warning(
-                f"SF CLI authentication failed: {str(e)}\n"
-                "Falling back to OAuth if configured"
-            )
+            f"Using SF CLI authentication with org: {sf_org_alias} "
+            "(credentials will be fetched on first use)")
+        return SFCLIAuth(sf_org_alias)
 
     # Try OAuth authentication if configured
-    if OAuthSession.is_available():
+    if oauth_configured:
         logger.info(
             "OAuth credentials configured, using OAuth PKCE authentication")
         try:

@@ -31,11 +31,15 @@ class SFCLIAuth:
         """
         Initialize SF CLI authentication with the specified org alias.
 
+        Credentials are fetched lazily on first use, not during construction,
+        so the MCP server can start quickly without blocking on subprocess calls
+        and also so that credentials are not unncessarily fetched until needed.
+
         Args:
             org_alias: The SF CLI org alias or username
 
         Raises:
-            Exception: If SF CLI is not available or org is not authenticated
+            Exception: If SF CLI binary is not installed
         """
         self.org_alias = org_alias
         self._token: Optional[str] = None
@@ -45,25 +49,15 @@ class SFCLIAuth:
         logger.info(
             f"Initializing SF CLI authentication with org: {org_alias}")
 
-        # Validate SF CLI is available
         if not shutil.which("sf"):
             raise Exception(
                 "SF CLI (sf command) not found in PATH. "
                 "Install from: https://developer.salesforce.com/tools/salesforcecli")
 
-        # Test authentication by fetching initial token
-        try:
-            self._refresh_credentials()
-        except Exception as e:
-            raise Exception(
-                f"Failed to authenticate with SF CLI org '{org_alias}'. "
-                f"Ensure you've authenticated via: sf org login web --alias {org_alias}\n"
-                f"Error: {str(e)}") from e
-
     @staticmethod
-    def is_available() -> bool:
+    def is_configured() -> bool:
         """
-        Check if SF CLI authentication is configured and available.
+        Check if SF CLI authentication is configured.
 
         Returns:
             bool: True if SF_ORG_ALIAS is set and sf command exists

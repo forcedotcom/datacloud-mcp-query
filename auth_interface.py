@@ -39,11 +39,11 @@ class AuthProvider(Protocol):
         ...
 
     @staticmethod
-    def is_available() -> bool:
+    def is_configured() -> bool:
         """
-        Check if this authentication method is configured and available.
+        Check if the required environment variables for this authentication method are set.
 
         Returns:
-            bool: True if the authentication method can be used, False otherwise
+            bool: True if the required configuration is present, False otherwise
         """
         ...

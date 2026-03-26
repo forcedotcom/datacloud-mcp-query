@@ -104,9 +104,9 @@ class OAuthSession:
         self.instance_url: str | None = None
 
     @staticmethod
-    def is_available() -> bool:
+    def is_configured() -> bool:
         """
-        Check if OAuth authentication is configured and available.
+        Check if OAuth authentication is configured.
 
         Returns:
             bool: True if SF_CLIENT_ID and SF_CLIENT_SECRET are set

@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import logging
 import os
-import sys
 import base64
 import hashlib
 import secrets
@@ -20,9 +19,29 @@ from rfc3986 import builder as uri_builder
 # Get logger for this module
 logger = logging.getLogger(__name__)
 
+# Environment variable names
+ENV_SF_CLIENT_ID = "SF_CLIENT_ID"
+ENV_SF_CLIENT_SECRET = "SF_CLIENT_SECRET"
+ENV_SF_LOGIN_URL = "SF_LOGIN_URL"
+ENV_SF_CALLBACK_URL = "SF_CALLBACK_URL"
+
+# Default values
+DEFAULT_LOGIN_URL = "login.salesforce.com"
+DEFAULT_CALLBACK_URL = "http://localhost:55556/Callback"
+
+
+class OAuthConfigError(Exception):
+    """Raised when OAuth configuration is incomplete or invalid."""
+    pass
+
 
 class OAuthConfig:
-    def __init__(self, client_id: str, client_secret: str, login_root: str, redirect_uri: str):
+    def __init__(
+            self,
+            client_id: str,
+            client_secret: str,
+            login_root: str,
+            redirect_uri: str):
         self.client_id = client_id
         self.client_secret = client_secret
         self.login_root = login_root
@@ -30,22 +49,25 @@ class OAuthConfig:
 
     @classmethod
     def from_env(cls) -> "OAuthConfig":
-        client_id = os.getenv("SF_CLIENT_ID")
-        client_secret = os.getenv("SF_CLIENT_SECRET")
-        login_root = os.getenv("SF_LOGIN_URL", "login.salesforce.com")
-        redirect_uri = os.getenv(
-            "SF_CALLBACK_URL", "http://localhost:55556/Callback")
+        client_id = os.getenv(ENV_SF_CLIENT_ID)
+        client_secret = os.getenv(ENV_SF_CLIENT_SECRET)
+        login_root = os.getenv(ENV_SF_LOGIN_URL, DEFAULT_LOGIN_URL)
+        redirect_uri = os.getenv(ENV_SF_CALLBACK_URL, DEFAULT_CALLBACK_URL)
 
         missing = [name for name, val in {
-            "SF_CLIENT_ID": client_id,
-            "SF_CLIENT_SECRET": client_secret,
+            ENV_SF_CLIENT_ID: client_id,
+            ENV_SF_CLIENT_SECRET: client_secret,
         }.items() if not val]
         if missing:
-            print(
-                f"Error: Missing required environment variables: {', '.join(missing)}")
-            sys.exit(1)
+            raise OAuthConfigError(
+                f"Missing required environment variables: {', '.join(missing)}"
+            )
 
-        return cls(client_id=client_id, client_secret=client_secret, login_root=login_root, redirect_uri=redirect_uri)
+        return cls(
+            client_id=client_id,
+            client_secret=client_secret,
+            login_root=login_root,
+            redirect_uri=redirect_uri)
 
 
 class _RequestHandler(http.server.BaseHTTPRequestHandler):  # pragma: no cover
@@ -89,6 +111,18 @@ class OAuthSession:
         self.token: str | None = None
         self.exp: datetime | None = None
         self.instance_url: str | None = None
+
+    @staticmethod
+    def is_configured() -> bool:
+        """
+        Check if OAuth authentication is configured.
+
+        Returns:
+            bool: True if SF_CLIENT_ID and SF_CLIENT_SECRET are set
+        """
+        client_id = os.getenv(ENV_SF_CLIENT_ID)
+        client_secret = os.getenv(ENV_SF_CLIENT_SECRET)
+        return bool(client_id and client_secret)
 
     def _run_oauth_flow(self, scopes: list[str]):
         logger.info(f"Starting OAuth flow with scopes: {scopes}")
@@ -156,7 +190,8 @@ class OAuthSession:
             headers={"Accept": "application/json"},
         )
 
-        logger.info(f"Token exchange response: status={response.status_code}, elapsed={response.elapsed.total_seconds():.2f}s")
+        logger.info(
+            f"Token exchange response: status={response.status_code}, elapsed={response.elapsed.total_seconds():.2f}s")
 
         if response.status_code >= 400:
             logger.error(f"Token exchange failed: {response.text}")

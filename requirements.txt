@@ -1,3 +1,11 @@
+# Python dependencies for datacloud-mcp-query
+# Install with: pip install -r requirements.txt
+
+# Optional External Dependency (not in PyPI):
+# - Salesforce CLI for SF CLI authentication
+#   Install separately: https://developer.salesforce.com/tools/salesforcecli
+#   Not required if using OAuth PKCE authentication
+
 pydantic>=2.11.7
 requests>=2.32.4
 rfc3986>=2.0.0

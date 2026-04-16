@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Union
 
 import requests
 
-from oauth import OAuthSession, OAuthConfig
+from auth_interface import AuthProvider
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -17,7 +17,8 @@ def _handle_error_response(response: requests.Response):
         message = response.text
         try:
             payload = json.loads(response.text)
-            # Connect API error format: list with first element containing JSON string in "message"
+            # Connect API error format: list with first element containing JSON
+            # string in "message"
             if isinstance(payload, list) and len(payload) > 0:
                 structured_message = payload[0]
                 try:
@@ -40,8 +41,9 @@ def _handle_error_response(response: requests.Response):
 
 
 def run_query(
-    oauth_session: OAuthSession,
+    auth_provider: AuthProvider,
     sql: str,
+    sql_parameters: Optional[List[Dict[str, Union[str, int, float, bool]]]] = None,
     dataspace: str = "default",
     workload_name: str | None = "data-360-mcp-query-oss",
     pagination_batch_size: int = 100000,
@@ -50,12 +52,24 @@ def run_query(
     Execute a SQL query using the Data Cloud Query Connect API, handling long-running queries
     and paginated result retrieval.
 
+    Args:
+        auth_provider: Authentication provider (SF CLI, OAuth, etc.)
+        sql: SQL query string (use :paramName placeholders for parameterized queries)
+        sql_parameters: Optional list of parameter dicts, each with "name" and "value" keys,
+            and an optional "type" key. Values can be str, int, float, or bool. Examples:
+            [{"name": "startDate", "value": "2025-01-01T00:00:00Z"}]
+            [{"name": "limit", "value": 100}]
+            [{"name": "active", "value": True}]
+        dataspace: Data Cloud dataspace name (default: "default")
+        workload_name: Workload name for resource management
+        pagination_batch_size: Number of rows to fetch per page
+
     Returns a dictionary containing:
     - 'data': the complete list of rows (aggregated across all pages) or "(empty)" if no rows
     - 'metadata': the schema/metadata of the result columns
     """
-    base_url = oauth_session.get_instance_url()
-    token = oauth_session.get_token()
+    base_url = auth_provider.get_instance_url()
+    token = auth_provider.get_token()
 
     headers = {"Authorization": f"Bearer {token}"}
     url_base = base_url + "/services/data/v63.0/ssot/query-sql"
@@ -64,12 +78,18 @@ def run_query(
         common_params["workloadName"] = workload_name
 
     # Step 1: submit the query
-    submit_body = {"sql": sql}
+    submit_body: dict = {"sql": sql}
+    if sql_parameters:
+        submit_body["sqlParameters"] = sql_parameters
     logger.info(
         f"Submitting SQL query to {url_base}, with params: {common_params}")
 
     submit_response = requests.post(
-        url_base, json=submit_body, params=common_params, headers=headers, timeout=120)
+        url_base,
+        json=submit_body,
+        params=common_params,
+        headers=headers,
+        timeout=120)
 
     logger.info(
         f"Query submission response: status={submit_response.status_code}, elapsed={submit_response.elapsed.total_seconds():.2f}s")
@@ -97,7 +117,8 @@ def run_query(
             f"Polling query status (attempt {poll_count}): {poll_url}")
 
         poll_params = dict(common_params)
-        # Signal that we want to do long-polling to get best latency for query end notification and minimize RPC calls
+        # Signal that we want to do long-polling to get best latency for query
+        # end notification and minimize RPC calls
         poll_params.update({
             "waitTimeMs": 10000,
         })
@@ -151,20 +172,20 @@ def run_query(
 
 
 if __name__ == "__main__":
-    # Configure logging
+    # Manual smoke test: authenticates and runs a query that spans multiple
+    # pagination batches. Expects SF_ORG_ALIAS or SF_CLIENT_ID/SF_CLIENT_SECRET
+    # to be set in the environment.
+    from auth_factory import create_auth_provider
+
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-    # Set debug level for this module during testing
-    logger.setLevel(logging.DEBUG)
-
-    sf_org: OAuthConfig = OAuthConfig.from_env()
-    oauth_session: OAuthSession = OAuthSession(sf_org)
-
-    result = run_query(OAuthSession(OAuthConfig.from_env(
-    )), "SELECT g::text || rpad(1::text,100) as a, g as b FROM generate_series(1, 40000) g ORDER BY b DESC")
-    print(f"Query result: {len(result['data'])} rows returned")
-    print(result)
+    auth_provider = create_auth_provider()
+    result = run_query(
+        auth_provider,
+        "SELECT g::text || rpad(1::text,100) as a, g as b FROM generate_series(1, 40000) g ORDER BY b DESC",
+    )
+    print(f"Rows: {len(result['data'])}, Columns: {len(result['metadata'])}")

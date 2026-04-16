@@ -16,6 +16,9 @@ from typing import Optional
 # Get logger for this module
 logger = logging.getLogger(__name__)
 
+# Environment variable names
+ENV_SF_ORG_ALIAS = "SF_ORG_ALIAS"
+
 
 class SFCLIAuth:
     """
@@ -62,7 +65,7 @@ class SFCLIAuth:
         Returns:
             bool: True if SF_ORG_ALIAS is set and sf command exists
         """
-        has_alias = bool(os.getenv("SF_ORG_ALIAS"))
+        has_alias = bool(os.getenv(ENV_SF_ORG_ALIAS))
         return has_alias and shutil.which("sf") is not None
 
     def _refresh_credentials(self) -> None:

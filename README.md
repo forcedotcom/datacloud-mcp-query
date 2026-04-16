@@ -189,6 +189,7 @@ Here's a complete, working configuration example with SF CLI authentication:
 **Problem: "Python not found" or "module not found" errors**
 - Make sure you're using the full absolute path to Python (not just `python3`)
 - If using a virtual environment, use the venv's Python: `/path/to/venv/bin/python`
+- Install the project dependencies against the same Python interpreter you configured in your Agent: `/path/to/python3 -m pip install -r requirements.txt`
 - Test your paths first: `/usr/bin/python3 /path/to/server.py` (should show MCP startup logs)
 
 **Problem: Server fails to start**

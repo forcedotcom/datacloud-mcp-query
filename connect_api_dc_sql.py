@@ -172,35 +172,20 @@ def run_query(
 
 
 if __name__ == "__main__":
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    # Set debug level for this module during testing
-    logger.setLevel(logging.DEBUG)
-
-    # Use the new auth factory (supports both SF CLI and OAuth with auto-detection)
-    # This will automatically choose:
-    #   - SF CLI authentication if SF_ORG_ALIAS is set
-    #   - OAuth PKCE authentication if SF_CLIENT_ID and SF_CLIENT_SECRET are set
+    # Manual smoke test: authenticates and runs a query that spans multiple
+    # pagination batches. Expects SF_ORG_ALIAS or SF_CLIENT_ID/SF_CLIENT_SECRET
+    # to be set in the environment.
     from auth_factory import create_auth_provider
 
-    logger.info("Creating authentication provider with auto-detection...")
-    auth_provider = create_auth_provider()
-
-    # Run a test query that generates 40,000 rows to test pagination
-    logger.info("Running test query with pagination...")
-    result = run_query(
-        auth_provider,
-        "SELECT g::text || rpad(1::text,100) as a, g as b FROM generate_series(1, 40000) g ORDER BY b DESC"
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-    print(f"\n✓ Query completed successfully!")
-    print(f"✓ Query result: {len(result['data'])} rows returned")
-    print(f"✓ Metadata columns: {len(result['metadata'])} columns")
-    print(f"\nFirst 3 rows:")
-    for i, row in enumerate(result['data'][:3]):
-        print(f"  Row {i+1}: {row}")
+    auth_provider = create_auth_provider()
+    result = run_query(
+        auth_provider,
+        "SELECT g::text || rpad(1::text,100) as a, g as b FROM generate_series(1, 40000) g ORDER BY b DESC",
+    )
+    print(f"Rows: {len(result['data'])}, Columns: {len(result['metadata'])}")

@@ -12,8 +12,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from auth_interface import AuthProvider
 
-from sf_cli_auth import SFCLIAuth
-from oauth import OAuthConfig, OAuthConfigError, OAuthSession
+from sf_cli_auth import SFCLIAuth, ENV_SF_ORG_ALIAS
+from oauth import (
+    OAuthConfig,
+    OAuthConfigError,
+    OAuthSession,
+    ENV_SF_CLIENT_ID,
+    ENV_SF_CLIENT_SECRET,
+)
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -31,35 +37,35 @@ def _build_error_message() -> str:
     Returns:
         str: Detailed error message with setup instructions
     """
-    sf_org_alias = os.getenv("SF_ORG_ALIAS")
-    sf_client_id = os.getenv("SF_CLIENT_ID")
-    sf_client_secret = os.getenv("SF_CLIENT_SECRET")
+    sf_org_alias = os.getenv(ENV_SF_ORG_ALIAS)
+    sf_client_id = os.getenv(ENV_SF_CLIENT_ID)
+    sf_client_secret = os.getenv(ENV_SF_CLIENT_SECRET)
 
     base_message = "No authentication method is configured.\n\n"
 
     # Determine which specific error scenario we're in
     if sf_org_alias and not sf_client_id:
         return base_message + (
-            f"SF_ORG_ALIAS is set to '{sf_org_alias}', but the sf CLI binary "
+            f"{ENV_SF_ORG_ALIAS} is set to '{sf_org_alias}', but the sf CLI binary "
             "was not found in PATH.\n"
             "Install SF CLI: https://developer.salesforce.com/tools/salesforcecli\n\n"
             "Alternatively, configure OAuth authentication with:\n"
-            "  export SF_CLIENT_ID='your_client_id'\n"
-            "  export SF_CLIENT_SECRET='your_client_secret'\n"
+            f"  export {ENV_SF_CLIENT_ID}='your_client_id'\n"
+            f"  export {ENV_SF_CLIENT_SECRET}='your_client_secret'\n"
             "See CONNECTED_APP_SETUP.md for OAuth setup instructions.\n")
 
     if sf_client_id and not sf_client_secret:
         return base_message + (
-            "SF_CLIENT_ID is set but SF_CLIENT_SECRET is missing.\n"
+            f"{ENV_SF_CLIENT_ID} is set but {ENV_SF_CLIENT_SECRET} is missing.\n"
             "For OAuth authentication, both are required:\n"
-            "  export SF_CLIENT_SECRET='your_client_secret'\n"
+            f"  export {ENV_SF_CLIENT_SECRET}='your_client_secret'\n"
         )
 
     if sf_client_secret and not sf_client_id:
         return base_message + (
-            "SF_CLIENT_SECRET is set but SF_CLIENT_ID is missing.\n"
+            f"{ENV_SF_CLIENT_SECRET} is set but {ENV_SF_CLIENT_ID} is missing.\n"
             "For OAuth authentication, both are required:\n"
-            "  export SF_CLIENT_ID='your_client_id'\n"
+            f"  export {ENV_SF_CLIENT_ID}='your_client_id'\n"
         )
 
     # No configuration at all - provide full setup instructions
@@ -68,12 +74,12 @@ def _build_error_message() -> str:
         "Method 1: SF CLI (Recommended)\n"
         "  1. Install SF CLI: https://developer.salesforce.com/tools/salesforcecli\n"
         "  2. Authenticate: sf org login web --alias myorg\n"
-        "  3. Set environment variable: export SF_ORG_ALIAS='myorg'\n\n"
+        f"  3. Set environment variable: export {ENV_SF_ORG_ALIAS}='myorg'\n\n"
         "Method 2: OAuth PKCE\n"
         "  1. Create a Connected App (see CONNECTED_APP_SETUP.md)\n"
         "  2. Set environment variables:\n"
-        "     export SF_CLIENT_ID='your_client_id'\n"
-        "     export SF_CLIENT_SECRET='your_client_secret'\n")
+        f"     export {ENV_SF_CLIENT_ID}='your_client_id'\n"
+        f"     export {ENV_SF_CLIENT_SECRET}='your_client_secret'\n")
 
 
 def create_auth_provider() -> AuthProvider:
@@ -101,12 +107,13 @@ def create_auth_provider() -> AuthProvider:
 
     if sf_cli_configured and oauth_configured:
         logger.warning(
-            "Both SF CLI (SF_ORG_ALIAS) and OAuth (SF_CLIENT_ID/SF_CLIENT_SECRET) "
-            "are configured. Using SF CLI. To use OAuth instead, unset SF_ORG_ALIAS.")
+            f"Both SF CLI ({ENV_SF_ORG_ALIAS}) and OAuth "
+            f"({ENV_SF_CLIENT_ID}/{ENV_SF_CLIENT_SECRET}) are configured. "
+            f"Using SF CLI. To use OAuth instead, unset {ENV_SF_ORG_ALIAS}.")
 
     # Try SF CLI authentication first if configured
     if sf_cli_configured:
-        sf_org_alias = os.getenv("SF_ORG_ALIAS")
+        sf_org_alias = os.getenv(ENV_SF_ORG_ALIAS)
         logger.info(
             f"Using SF CLI authentication with org: {sf_org_alias} "
             "(credentials will be fetched on first use)")

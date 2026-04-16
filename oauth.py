@@ -19,6 +19,16 @@ from rfc3986 import builder as uri_builder
 # Get logger for this module
 logger = logging.getLogger(__name__)
 
+# Environment variable names
+ENV_SF_CLIENT_ID = "SF_CLIENT_ID"
+ENV_SF_CLIENT_SECRET = "SF_CLIENT_SECRET"
+ENV_SF_LOGIN_URL = "SF_LOGIN_URL"
+ENV_SF_CALLBACK_URL = "SF_CALLBACK_URL"
+
+# Default values
+DEFAULT_LOGIN_URL = "login.salesforce.com"
+DEFAULT_CALLBACK_URL = "http://localhost:55556/Callback"
+
 
 class OAuthConfigError(Exception):
     """Raised when OAuth configuration is incomplete or invalid."""
@@ -39,15 +49,14 @@ class OAuthConfig:
 
     @classmethod
     def from_env(cls) -> "OAuthConfig":
-        client_id = os.getenv("SF_CLIENT_ID")
-        client_secret = os.getenv("SF_CLIENT_SECRET")
-        login_root = os.getenv("SF_LOGIN_URL", "login.salesforce.com")
-        redirect_uri = os.getenv(
-            "SF_CALLBACK_URL", "http://localhost:55556/Callback")
+        client_id = os.getenv(ENV_SF_CLIENT_ID)
+        client_secret = os.getenv(ENV_SF_CLIENT_SECRET)
+        login_root = os.getenv(ENV_SF_LOGIN_URL, DEFAULT_LOGIN_URL)
+        redirect_uri = os.getenv(ENV_SF_CALLBACK_URL, DEFAULT_CALLBACK_URL)
 
         missing = [name for name, val in {
-            "SF_CLIENT_ID": client_id,
-            "SF_CLIENT_SECRET": client_secret,
+            ENV_SF_CLIENT_ID: client_id,
+            ENV_SF_CLIENT_SECRET: client_secret,
         }.items() if not val]
         if missing:
             raise OAuthConfigError(
@@ -111,8 +120,8 @@ class OAuthSession:
         Returns:
             bool: True if SF_CLIENT_ID and SF_CLIENT_SECRET are set
         """
-        client_id = os.getenv("SF_CLIENT_ID")
-        client_secret = os.getenv("SF_CLIENT_SECRET")
+        client_id = os.getenv(ENV_SF_CLIENT_ID)
+        client_secret = os.getenv(ENV_SF_CLIENT_SECRET)
         return bool(client_id and client_secret)
 
     def _run_oauth_flow(self, scopes: list[str]):

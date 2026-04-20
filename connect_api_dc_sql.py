@@ -1,17 +1,21 @@
 import json
 import logging
-import time
 from typing import Dict, List, Optional, Union
 
-import requests
+import anyio
+import httpx
 
 from auth_interface import AuthProvider
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
 
+# Default per-request HTTP timeout (seconds). Covers connect + read + write.
+# Must be larger than the Data Cloud long-poll wait time (10s) plus headroom.
+_DEFAULT_HTTP_TIMEOUT_S = 120.0
 
-def _handle_error_response(response: requests.Response):
+
+def _handle_error_response(response: httpx.Response):
     if response.status_code >= 300:
         # Parse error message from response
         message = response.text
@@ -35,12 +39,12 @@ def _handle_error_response(response: requests.Response):
         # Raise exception with error message
         raise Exception(
             response.status_code,
-            response.reason,
+            response.reason_phrase,
             message,
         )
 
 
-def run_query(
+async def run_query(
     auth_provider: AuthProvider,
     sql: str,
     sql_parameters: Optional[List[Dict[str, Union[str, int, float, bool]]]] = None,
@@ -52,6 +56,12 @@ def run_query(
     """
     Execute a SQL query using the Data Cloud Query Connect API, handling long-running queries
     and paginated result retrieval.
+
+    This is a native coroutine that uses ``httpx.AsyncClient`` for non-blocking I/O, so it
+    can be awaited from an asyncio/anyio event loop without tying up a worker thread while
+    waiting on the server. ``AuthProvider`` methods are still synchronous; any potentially
+    blocking work they perform (subprocesses, OAuth flows) is offloaded to a worker thread
+    via ``anyio.to_thread.run_sync`` so it does not block the event loop either.
 
     Args:
         auth_provider: Authentication provider (SF CLI, OAuth, etc.)
@@ -72,8 +82,8 @@ def run_query(
     - 'data': the complete list of rows (aggregated across all pages) or "(empty)" if no rows
     - 'metadata': the schema/metadata of the result columns
     """
-    base_url = auth_provider.get_instance_url()
-    token = auth_provider.get_token()
+    base_url = await anyio.to_thread.run_sync(auth_provider.get_instance_url)
+    token = await anyio.to_thread.run_sync(auth_provider.get_token)
 
     headers = {"Authorization": f"Bearer {token}"}
     url_base = base_url + "/services/data/v63.0/ssot/query-sql"
@@ -81,94 +91,99 @@ def run_query(
     if workload_name:
         common_params["workloadName"] = workload_name
 
-    # Step 1: submit the query
     submit_body: dict = {"sql": sql}
     if sql_parameters:
         submit_body["sqlParameters"] = sql_parameters
     if query_settings:
         submit_body["querySettings"] = query_settings
-    logger.info(
-        f"Submitting SQL query to {url_base}, with params: {common_params}")
 
-    submit_response = requests.post(
-        url_base,
-        json=submit_body,
-        params=common_params,
-        headers=headers,
-        timeout=120)
+    async with httpx.AsyncClient(timeout=_DEFAULT_HTTP_TIMEOUT_S) as client:
+        # Step 1: submit the query
+        logger.info(
+            f"Submitting SQL query to {url_base}, with params: {common_params}")
 
-    logger.info(
-        f"Query submission response: status={submit_response.status_code}, elapsed={submit_response.elapsed.total_seconds():.2f}s")
-    _handle_error_response(submit_response)
+        submit_response = await client.post(
+            url_base,
+            json=submit_body,
+            params=common_params,
+            headers=headers,
+        )
 
-    submit_payload = submit_response.json()
-    status_obj = submit_payload.get("status", {})
-    query_id = status_obj.get("queryId") or submit_payload.get("queryId")
-    if not query_id:
-        raise Exception(500, "MissingQueryId",
-                        "Query ID not returned by the API.")
+        logger.info(
+            f"Query submission response: status={submit_response.status_code}, "
+            f"elapsed={submit_response.elapsed.total_seconds():.2f}s")
+        _handle_error_response(submit_response)
 
-    # Collect initial rows and metadata if present
-    rows: list = submit_payload.get("data", []) or []
-    metadata = submit_payload.get("metadata", [])
-    completion = status_obj.get("completionStatus")
-    total_row_count = int(status_obj.get("rowCount"))
+        submit_payload = submit_response.json()
+        status_obj = submit_payload.get("status", {})
+        query_id = status_obj.get("queryId") or submit_payload.get("queryId")
+        if not query_id:
+            raise Exception(500, "MissingQueryId",
+                            "Query ID not returned by the API.")
 
-    # Step 2: poll for completion when needed (long-polling via waitTimeMs)
-    poll_count = 0
-    while completion not in ["Finished", "ResultsProduced"]:
-        poll_count += 1
-        poll_url = f"{url_base}/{query_id}"
-        logger.debug(
-            f"Polling query status (attempt {poll_count}): {poll_url}")
+        # Collect initial rows and metadata if present
+        rows: list = submit_payload.get("data", []) or []
+        metadata = submit_payload.get("metadata", [])
+        completion = status_obj.get("completionStatus")
+        total_row_count = int(status_obj.get("rowCount"))
 
-        poll_params = dict(common_params)
-        # Signal that we want to do long-polling to get best latency for query
-        # end notification and minimize RPC calls
-        poll_params.update({
-            "waitTimeMs": 10000,
-        })
-        poll_response = requests.get(
-            poll_url, params=poll_params, headers=headers, timeout=120)
+        # Step 2: poll for completion when needed (long-polling via waitTimeMs)
+        poll_count = 0
+        while completion not in ["Finished", "ResultsProduced"]:
+            poll_count += 1
+            poll_url = f"{url_base}/{query_id}"
+            logger.debug(
+                f"Polling query status (attempt {poll_count}): {poll_url}")
 
-        logger.debug(
-            f"Poll response: status={poll_response.status_code}, elapsed={poll_response.elapsed.total_seconds():.2f}s")
-        _handle_error_response(poll_response)
-        poll_payload = poll_response.json()
-        completion = poll_payload.get("completionStatus")
-        total_row_count = int(poll_payload.get("rowCount"))
+            poll_params = dict(common_params)
+            # Signal that we want to do long-polling to get best latency for query
+            # end notification and minimize RPC calls
+            poll_params.update({
+                "waitTimeMs": 10000,
+            })
+            poll_response = await client.get(
+                poll_url, params=poll_params, headers=headers)
 
-    # Step 3: retrieve remaining rows via pagination
-    while len(rows) < total_row_count:
-        rows_params = dict(common_params)
-        rows_params.update({
-            "rowLimit": pagination_batch_size,
-            "offset": len(rows),
-            "omitSchema": "true",
-        })
+            logger.debug(
+                f"Poll response: status={poll_response.status_code}, "
+                f"elapsed={poll_response.elapsed.total_seconds():.2f}s")
+            _handle_error_response(poll_response)
+            poll_payload = poll_response.json()
+            completion = poll_payload.get("completionStatus")
+            total_row_count = int(poll_payload.get("rowCount"))
 
-        rows_url = f"{url_base}/{query_id}/rows"
-        logger.debug(
-            f"Fetching rows: offset={rows_params.get('offset')}, limit={rows_params.get('rowLimit')}")
+        # Step 3: retrieve remaining rows via pagination
+        while len(rows) < total_row_count:
+            rows_params = dict(common_params)
+            rows_params.update({
+                "rowLimit": pagination_batch_size,
+                "offset": len(rows),
+                "omitSchema": "true",
+            })
 
-        rows_response = requests.get(
-            rows_url, params=rows_params, headers=headers, timeout=120)
+            rows_url = f"{url_base}/{query_id}/rows"
+            logger.debug(
+                f"Fetching rows: offset={rows_params.get('offset')}, limit={rows_params.get('rowLimit')}")
 
-        logger.debug(
-            f"Rows fetch response: status={rows_response.status_code}, elapsed={rows_response.elapsed.total_seconds():.2f}s")
-        _handle_error_response(rows_response)
+            rows_response = await client.get(
+                rows_url, params=rows_params, headers=headers)
 
-        chunk = rows_response.json()
-        chunk_rows = chunk.get("data", []) or []
-        returned_rows = int(chunk.get("returnedRows", len(chunk_rows)))
+            logger.debug(
+                f"Rows fetch response: status={rows_response.status_code}, "
+                f"elapsed={rows_response.elapsed.total_seconds():.2f}s")
+            _handle_error_response(rows_response)
 
-        if returned_rows == 0:
-            raise Exception(500, "MissingRows",
-                            "Expected rows to be returned, but received 0.")
+            chunk = rows_response.json()
+            chunk_rows = chunk.get("data", []) or []
+            returned_rows = int(chunk.get("returnedRows", len(chunk_rows)))
 
-        rows.extend(chunk_rows)
-        logger.debug(
-            f"Retrieved {returned_rows} rows, total so far: {len(rows)}")
+            if returned_rows == 0:
+                raise Exception(500, "MissingRows",
+                                "Expected rows to be returned, but received 0.")
+
+            rows.extend(chunk_rows)
+            logger.debug(
+                f"Retrieved {returned_rows} rows, total so far: {len(rows)}")
 
     logger.info(f"Query completed: retrieved {len(rows)} total rows")
     return {
@@ -181,6 +196,8 @@ if __name__ == "__main__":
     # Manual smoke test: authenticates and runs a query that spans multiple
     # pagination batches. Expects SF_ORG_ALIAS or SF_CLIENT_ID/SF_CLIENT_SECRET
     # to be set in the environment.
+    import asyncio
+
     from auth_factory import create_auth_provider
 
     logging.basicConfig(
@@ -189,9 +206,12 @@ if __name__ == "__main__":
         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-    auth_provider = create_auth_provider()
-    result = run_query(
-        auth_provider,
-        "SELECT g::text || rpad(1::text,100) as a, g as b FROM generate_series(1, 40000) g ORDER BY b DESC",
-    )
-    print(f"Rows: {len(result['data'])}, Columns: {len(result['metadata'])}")
+    async def _main():
+        auth_provider = create_auth_provider()
+        result = await run_query(
+            auth_provider,
+            "SELECT g::text || rpad(1::text,100) as a, g as b FROM generate_series(1, 40000) g ORDER BY b DESC",
+        )
+        print(f"Rows: {len(result['data'])}, Columns: {len(result['metadata'])}")
+
+    asyncio.run(_main())

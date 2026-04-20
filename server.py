@@ -25,21 +25,28 @@ except AuthenticationError as e:
 DEFAULT_LIST_TABLE_FILTER = os.getenv('DEFAULT_LIST_TABLE_FILTER', '%')
 
 
+DATASPACE_FIELD_DESCRIPTION = "The Data Cloud dataspace name to execute against. Defaults to 'default'."
+
+
 @mcp.tool(description="Executes a SQL query and returns the results")
 def query(
     sql: str = Field(
         description="A SQL query in the PostgreSQL dialect make sure to always quote all identifies and use the exact casing. To formulate the query first verify which tables and fields to use through the suggest fields tool (or if it is broken through the list tables / describe tables call). Before executing the tool provide the user a succinct summary (targeted to low code users) on the semantics of the query"),
+    dataspace: str = Field(default="default", description=DATASPACE_FIELD_DESCRIPTION),
 ):
     # Returns both data and metadata
-    return run_query(auth_provider, sql)
+    return run_query(auth_provider, sql, dataspace=dataspace)
 
 
 @mcp.tool(description="Lists the available tables in the database")
-def list_tables() -> list[str]:
+def list_tables(
+    dataspace: str = Field(default="default", description=DATASPACE_FIELD_DESCRIPTION),
+) -> list[str]:
     sql = "SELECT c.relname AS TABLE_NAME FROM pg_catalog.pg_namespace n, pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_description d ON (c.oid = d.objoid AND d.objsubid = 0 AND d.classoid = 'pg_class'::regclass) WHERE c.relnamespace = n.oid AND c.relname LIKE :tableFilter"
     result = run_query(
         auth_provider, sql,
         sql_parameters=[{"name": "tableFilter", "value": DEFAULT_LIST_TABLE_FILTER}],
+        dataspace=dataspace,
     )
     # Extract data from the result dictionary
     data = result.get("data", [])
@@ -49,11 +56,13 @@ def list_tables() -> list[str]:
 @mcp.tool(description="Describes the columns of a table")
 def describe_table(
     table: str = Field(description="The table name"),
+    dataspace: str = Field(default="default", description=DATASPACE_FIELD_DESCRIPTION),
 ) -> list[str]:
     sql = "SELECT a.attname FROM pg_catalog.pg_namespace n JOIN pg_catalog.pg_class c ON (c.relnamespace = n.oid) JOIN pg_catalog.pg_attribute a ON (a.attrelid = c.oid) JOIN pg_catalog.pg_type t ON (a.atttypid = t.oid) LEFT JOIN pg_catalog.pg_attrdef def ON (a.attrelid = def.adrelid AND a.attnum = def.adnum) LEFT JOIN pg_catalog.pg_description dsc ON (c.oid = dsc.objoid AND a.attnum = dsc.objsubid) LEFT JOIN pg_catalog.pg_class dc ON (dc.oid = dsc.classoid AND dc.relname = 'pg_class') LEFT JOIN pg_catalog.pg_namespace dn ON (dc.relnamespace = dn.oid AND dn.nspname = 'pg_catalog') WHERE a.attnum > 0 AND NOT a.attisdropped AND c.relname = :tableName"
     result = run_query(
         auth_provider, sql,
         sql_parameters=[{"name": "tableName", "value": table}],
+        dataspace=dataspace,
     )
     # Extract data from the result dictionary
     data = result.get("data", [])

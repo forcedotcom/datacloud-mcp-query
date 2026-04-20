@@ -47,6 +47,7 @@ def run_query(
     dataspace: str = "default",
     workload_name: str | None = "data-360-mcp-query-oss",
     pagination_batch_size: int = 100000,
+    query_settings: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Union[List, str]]:
     """
     Execute a SQL query using the Data Cloud Query Connect API, handling long-running queries
@@ -63,6 +64,9 @@ def run_query(
         dataspace: Data Cloud dataspace name (default: "default")
         workload_name: Workload name for resource management
         pagination_batch_size: Number of rows to fetch per page
+        query_settings: Optional dict of query execution settings passed through as
+            ``querySettings`` in the Data Cloud Query API request body. Example:
+            {"query_timeout": "1800000ms"}
 
     Returns a dictionary containing:
     - 'data': the complete list of rows (aggregated across all pages) or "(empty)" if no rows
@@ -81,6 +85,8 @@ def run_query(
     submit_body: dict = {"sql": sql}
     if sql_parameters:
         submit_body["sqlParameters"] = sql_parameters
+    if query_settings:
+        submit_body["querySettings"] = query_settings
     logger.info(
         f"Submitting SQL query to {url_base}, with params: {common_params}")
 

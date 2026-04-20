@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
@@ -28,14 +29,35 @@ DEFAULT_LIST_TABLE_FILTER = os.getenv('DEFAULT_LIST_TABLE_FILTER', '%')
 DATASPACE_FIELD_DESCRIPTION = "The Data Cloud dataspace name to execute against. Defaults to 'default'."
 
 
-@mcp.tool(description="Executes a SQL query and returns the results")
+@mcp.tool(
+    description=(
+        "Executes a SQL query against Salesforce Data 360 (formerly Data Cloud) and returns the results. "
+        "Data 360 SQL is PostgreSQL-flavored but has its own dialect, supported functions, and constraints. "
+        "For authoritative syntax, supported functions, and semantics, consult the Data 360 SQL Reference: "
+        "https://developer.salesforce.com/docs/data/data-cloud-query-guide/references/dc-sql-reference/data-cloud-sql-context.html"
+    )
+)
 def query(
     sql: str = Field(
-        description="A SQL query in the PostgreSQL dialect make sure to always quote all identifies and use the exact casing. To formulate the query first verify which tables and fields to use through the suggest fields tool (or if it is broken through the list tables / describe tables call). Before executing the tool provide the user a succinct summary (targeted to low code users) on the semantics of the query"),
+        description=(
+            "A SQL query in the Data 360 SQL dialect (PostgreSQL-flavored). Always quote all identifiers "
+            "and preserve their exact casing. Before writing a query, verify the tables and fields to use "
+            "via the suggest fields tool (or, if unavailable, via list_tables / describe_table). "
+            "When in doubt about supported syntax or functions, refer to the Data 360 SQL Reference: "
+            "https://developer.salesforce.com/docs/data/data-cloud-query-guide/references/dc-sql-reference/data-cloud-sql-context.html "
+            "Before executing the tool, provide the user a succinct summary (targeted to low code users) on the semantics of the query."
+        )
+    ),
     dataspace: str = Field(default="default", description=DATASPACE_FIELD_DESCRIPTION),
+    query_settings: Optional[dict[str, str]] = Field(
+        default=None,
+        description="Optional Data Cloud query settings, passed through as-is as 'querySettings' in the Query API request body. Known settings include 'query_timeout' with a duration-suffixed value, e.g. {\"query_timeout\": \"1800000ms\"}. Leave unset to use Data Cloud defaults.",
+    ),
 ):
     # Returns both data and metadata
-    return run_query(auth_provider, sql, dataspace=dataspace)
+    return run_query(
+        auth_provider, sql, dataspace=dataspace, query_settings=query_settings
+    )
 
 
 @mcp.tool(description="Lists the available tables in the database")
